@@ -105,8 +105,6 @@ def process_player(player_id):
     player_node = ET.fromstring(urllib2.urlopen(URL).read())
     player_obj = Player(player_node, player_name_ru)
 
-            
-            #print p_name + "(" + p_team +")" + " забил " + vs_team# + " в " + period + " периоде " + time
     if player_obj.team and player_obj.goals:
         to_add = []
         for goal in player_obj.goals:
