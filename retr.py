@@ -2,10 +2,8 @@
 #-*- coding:utf-8 -*-
 
 import re
-import random
 import urllib2
 import sqlite3
-import datetime
 import elementtree.ElementTree as ET
 
 import bitly
