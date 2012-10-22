@@ -77,14 +77,15 @@ def after_retrieve_action(retrieve_out_data):
     print ' '.join(message)
     c.execute("UPDATE last_goal SET web_tracking_id=? WHERE player_id=?", (last_goal, player_id))
 
-conn = sqlite3.connect(DATABASE_PATH)
-c = conn.cursor()
 
-players_data = get_players_data()
-pool = eventlet.GreenPool()
-for goal_triads in pool.imap(process_player, players_data):
-    if goal_triads:
-        for retrieve_out_data in goal_triads:
-            after_retrieve_action(retrieve_out_data)
-conn.commit()
-c.close()
+if __name__ == "__main__":
+    conn = sqlite3.connect(DATABASE_PATH)
+    c = conn.cursor()
+    players_data = get_players_data()
+    pool = eventlet.GreenPool()
+    for goal_triads in pool.imap(process_player, players_data):
+        if goal_triads:
+            for retrieve_out_data in goal_triads:
+                after_retrieve_action(retrieve_out_data)
+    conn.commit()
+    c.close()
