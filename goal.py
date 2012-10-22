@@ -15,7 +15,7 @@ class Goal(object):
         vs_side = 'away-team' if self.player.team_ab == self.home_team_ab else 'home-team'
         vs_team_city = goal_node.find(vs_side).find("city").text
         vs_team_name = goal_node.find(vs_side).find("name").text
-        self.vs_team = "%s %s" % (vs_team_city, vs_team_name)
+        self.vs_team = "%s %s" % (vs_team_city.encode("utf-8"), vs_team_name.encode("utf-8"))
         self.goal_date_raw = goal_node.find("game-date").text
         self.goal_date = '.'.join(self.goal_date_raw.split("/")[1::-1])  # 12/31/2012 -> 31.12;
 
@@ -24,14 +24,16 @@ class Goal(object):
                      'player_name': self.player.player_name_ru,
                      'player_team': self.player.team_ab,
                      'vs_team': self.vs_team}
-        return "%(goal_date)s %(player_name)s (%(player_team)s) " \
-               "забил в матче против %(vs_team)s" % goal_dict
+        try:
+            return "%(goal_date)s %(player_name)s (%(player_team)s) " \
+                   "забил в матче против %(vs_team)s" % goal_dict
+        except:
+            print goal_dict
 
-    def get_twitter_text(self):
-        return "%s %s" % (self.get_text(), self.get_video_url())
+    def get_text_and_url(self):
+        return self.get_text(), self.get_video_url()
 
     def get_video_url(self):
         video_url_template = "http://video.nhl.com/videocenter/console?hlp=%s&event=%s"
-        bitly_api = bitly.Api(login=settings.BITLY_LOGIN, apikey=settings.BITLY_API_KEY)
         video_url =  video_url_template % (self.player.id, self.event_id)
-        return bitly_api.shorten(video_url)
+        return video_url

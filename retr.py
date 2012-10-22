@@ -11,17 +11,12 @@ from itertools import takewhile
 
 import bitly
 import twitter
+import eventlet
+from eventlet.green import urllib2 as el_urllib2
 
 from player import Player
 from goal import Goal
-
-
 from settings import *
-
-#api = twitter.Api(consumer_key=TWITTER_CONSUMER_KEY,
-#                  consumer_secret=TWITTER_CONSUMER_SECRET,
-#                  access_token_key=TWITTER_ACCESS_TOKEN_KEY,
-#                  access_token_secret=TWITTER_ACCESS_TOKEN_SECRET)
 
 def get_list_of_active_players():
     BEGIN = "<!-- player search -->"
@@ -52,21 +47,23 @@ def update_players_db(players):
 def process_player(player_data):
     player_id, player_name_ru, last_wtid = player_data
     URL = "http://video.nhl.com/videocenter/highlights?xml=2&id=%s" % player_id
-    player_node = ET.fromstring(urllib2.urlopen(URL).read())
+    player_node = ET.fromstring(el_urllib2.urlopen(URL).read())
     player_obj = Player(player_node, player_name_ru, player_id)
 
     if player_obj.team and player_obj.goals:
         # take all goals since last update
+        
         to_add = takewhile(lambda goal: not goal.find("web-tracking-id").text==last_wtid, player_obj.goals)
         if to_add:
+            goal_triads = []
             last_goal = player_obj.goals[0].find("web-tracking-id").text
             for goal in to_add:
                 goal_obj = Goal(goal, player_obj)
-                tw = goal_obj.get_twitter_text()
-                return tw, player_id, last_goal
+                text, url = goal_obj.get_text_and_url()
+                goal_triads.append(((text, url), player_id, last_goal))
+            return goal_triads
+    return None
 
-conn = sqlite3.connect(DATABASE_PATH)
-c = conn.cursor()
 
 #players = get_list_of_active_players() # brocken with new version of nhl site
 #players_in_db = update_players_db([]) # moved to get_players_data
@@ -75,17 +72,19 @@ def get_players_data():
     c.execute("SELECT player_id, player_name, web_tracking_id FROM last_goal")
     return c.fetchall()
 
-def after_retrieve_action(out_pdata):
-    message, player_id, last_goal = out_pdata
-    print message
+def after_retrieve_action(retrieve_out_data):
+    message, player_id, last_goal = retrieve_out_data
+    print ' '.join(message)
     c.execute("UPDATE last_goal SET web_tracking_id=? WHERE player_id=?", (last_goal, player_id))
 
+conn = sqlite3.connect(DATABASE_PATH)
+c = conn.cursor()
+
 players_data = get_players_data()
-
-for player_data in players_data:
-    retrieve_out_data = process_player(player_data)
-    if retrieve_out_data:
-        after_retrieve_action(retrieve_out_data)
-    conn.commit()
-
+pool = eventlet.GreenPool()
+for goal_triads in pool.imap(process_player, players_data):
+    if goal_triads:
+        for retrieve_out_data in goal_triads:
+            after_retrieve_action(retrieve_out_data)
+conn.commit()
 c.close()

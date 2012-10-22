@@ -15,4 +15,5 @@ class Player(object):
         else:
             return
         self.goals = player_node.find("goals")
-        self.player_name_ru = player_name_ru.encode('utf-8')
+        self.player_name_ru = player_name_ru.encode('utf-8') if player_name_ru else self.aka_name
+
