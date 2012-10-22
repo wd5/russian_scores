@@ -18,6 +18,11 @@ from goal import Goal
 
 from settings import *
 
+#api = twitter.Api(consumer_key=TWITTER_CONSUMER_KEY,
+#                  consumer_secret=TWITTER_CONSUMER_SECRET,
+#                  access_token_key=TWITTER_ACCESS_TOKEN_KEY,
+#                  access_token_secret=TWITTER_ACCESS_TOKEN_SECRET)
+
 def get_list_of_active_players():
     BEGIN = "<!-- player search -->"
     END = "<!-- end player search -->"
@@ -44,48 +49,43 @@ def update_players_db(players):
     return db_players
     
     
-def process_player(player_id):
+def process_player(player_data):
+    player_id, player_name_ru, last_wtid = player_data
     URL = "http://video.nhl.com/videocenter/highlights?xml=2&id=%s" % player_id
-    GET_LAST_GOAL_QUERY = "SELECT web_tracking_id, player_name FROM last_goal WHERE player_id=?"
-
-    c.execute(GET_LAST_GOAL_QUERY, (player_id,))
-    last_wtid, player_name_ru = c.fetchone()
     player_node = ET.fromstring(urllib2.urlopen(URL).read())
     player_obj = Player(player_node, player_name_ru, player_id)
 
-    print URL, player_name_ru
-
     if player_obj.team and player_obj.goals:
-        # take all goals, before last goal on previous work
+        # take all goals since last update
         to_add = takewhile(lambda goal: not goal.find("web-tracking-id").text==last_wtid, player_obj.goals)
-
         if to_add:
             last_goal = player_obj.goals[0].find("web-tracking-id").text
-            c.execute("UPDATE last_goal SET web_tracking_id=? WHERE player_id=?", (last_goal, player_id))
             for goal in to_add:
                 goal_obj = Goal(goal, player_obj)
                 tw = goal_obj.get_twitter_text()
-                print tw, len(tw)
-
-            #if not DEBUG:
-                #api.PostUpdate(tw[:140])
-        conn.commit()
+                return tw, player_id, last_goal
 
 conn = sqlite3.connect(DATABASE_PATH)
 c = conn.cursor()
 
-players = get_list_of_active_players()
-players_in_db = update_players_db(players)
+#players = get_list_of_active_players() # brocken with new version of nhl site
+#players_in_db = update_players_db([]) # moved to get_players_data
 
+def get_players_data():
+    c.execute("SELECT player_id, player_name, web_tracking_id FROM last_goal")
+    return c.fetchall()
 
-#api = twitter.Api(consumer_key=TWITTER_CONSUMER_KEY,
-#                  consumer_secret=TWITTER_CONSUMER_SECRET,
-#                  access_token_key=TWITTER_ACCESS_TOKEN_KEY,
-#                  access_token_secret=TWITTER_ACCESS_TOKEN_SECRET)
+def after_retrieve_action(out_pdata):
+    message, player_id, last_goal = out_pdata
+    print message
+    c.execute("UPDATE last_goal SET web_tracking_id=? WHERE player_id=?", (last_goal, player_id))
 
-#for player_id in players_in_db:
-#    goals_to_add = process_player(player_id)
+players_data = get_players_data()
 
-process_player(8467496)
+for player_data in players_data:
+    retrieve_out_data = process_player(player_data)
+    if retrieve_out_data:
+        after_retrieve_action(retrieve_out_data)
+    conn.commit()
 
 c.close()
